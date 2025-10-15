@@ -1,34 +1,35 @@
-import React from "react";
-import { Tldraw } from "tldraw";
+import { Tldraw, useEditor } from "tldraw";
 import "tldraw/tldraw.css";
+import { useEffect } from "react";
 
-function App() {
+function DrawingCanvas() {
+  const editor = useEditor();
+
+  useEffect(() => {
+    if (!editor) return;
+
+    // Selecciona automáticamente la herramienta de lápiz al iniciar
+    editor.setCurrentTool("draw");
+
+    // Añadimos un label ARIA para accesibilidad
+    const canvasEl = document.querySelector('[data-testid="canvas"]');
+    if (canvasEl) {
+      canvasEl.setAttribute("role", "application");
+      canvasEl.setAttribute("aria-label", "Área de dibujo para firmar o dibujar con el dedo");
+      canvasEl.setAttribute("tabindex", "0");
+    }
+  }, [editor]);
+
+  return null;
+}
+
+export default function App() {
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
-      <header
-        style={{
-          background: "#222",
-          color: "white",
-          padding: "0.5rem",
-          textAlign: "center",
-        }}
-      >
-        <h1 style={{ fontSize: "1.2rem" }}>Firma accesible con tldraw</h1>
-        <p>
-          Use su mouse o dedo para firmar. Los lectores de pantalla pueden usar
-          navegación por teclado para explorar herramientas y avisos.
-        </p>
-      </header>
-
-      <main
-        role="region"
-        aria-label="Área de firma"
-        style={{ width: "100%", height: "calc(100% - 80px)" }}
-      >
-        <Tldraw />
-      </main>
+      <Tldraw autoFocus hideUi>
+        <DrawingCanvas />
+      </Tldraw>
     </div>
   );
 }
 
-export default App;
