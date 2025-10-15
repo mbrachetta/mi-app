@@ -16,7 +16,7 @@ function App() {
     }));
   };
 
-  // ---- Eventos mouse/touch ----
+  // ---- Eventos pointer para dibujo libre ----
   const handlePointerDown = (row, col) => {
     setDrawing(true);
     markCell(row, col);
@@ -31,7 +31,7 @@ function App() {
   };
 
   return (
-    <div className="grid-container">
+    <div className="grid-container" onMouseUp={handlePointerUp} onMouseLeave={handlePointerUp}>
       {Array.from({ length: ROWS }).map((_, row) => (
         <div className="grid-row" key={row}>
           {Array.from({ length: COLS }).map((_, col) => {
@@ -40,8 +40,8 @@ function App() {
               <div
                 key={col}
                 className={`grid-cell ${selectedCells[key] ? "selected" : ""}`}
-                tabIndex={0} // necesario para VoiceOver
-                onFocus={() => markCell(row, col)} // VoiceOver
+                tabIndex={0} // necesario para VoiceOver y navegación por teclado
+                onFocus={() => markCell(row, col)} // VoiceOver y teclado
                 onPointerDown={() => handlePointerDown(row, col)} // mouse/touch
                 onPointerEnter={() => handlePointerEnter(row, col)}
                 onPointerUp={handlePointerUp}
