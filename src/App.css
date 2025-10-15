@@ -12,6 +12,7 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  touch-action: none; /* evita scroll mientras dibujamos */
 }
 
 .grid-row {

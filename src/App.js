@@ -1,12 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import "./App.css";
 
 const ROWS = 10;
 const COLS = 10;
+const CELL_SIZE = 40; // px
 
 function App() {
   const [selectedCells, setSelectedCells] = useState({});
   const [drawing, setDrawing] = useState(false);
+  const containerRef = useRef(null);
 
   const markCell = (row, col) => {
     const key = `${row}-${col}`;
@@ -16,14 +18,37 @@ function App() {
     }));
   };
 
-  // Eventos de touch/mouse para dibujo libre
-  const handlePointerDown = (row, col) => {
-    setDrawing(true);
+  // ---- VoiceOver ----
+  const handleFocus = (row, col) => {
     markCell(row, col);
   };
 
-  const handlePointerEnter = (row, col) => {
-    if (drawing) markCell(row, col);
+  // ---- Mouse / Touch ----
+  const getCellFromPointer = (x, y) => {
+    const rect = containerRef.current.getBoundingClientRect();
+    const col = Math.floor((x - rect.left) / CELL_SIZE);
+    const row = Math.floor((y - rect.top) / CELL_SIZE);
+    if (col >= 0 && col < COLS && row >= 0 && row < ROWS) {
+      return { row, col };
+    }
+    return null;
+  };
+
+  const handlePointerDown = (e) => {
+    e.preventDefault();
+    setDrawing(true);
+    const pointerX = e.touches ? e.touches[0].clientX : e.clientX;
+    const pointerY = e.touches ? e.touches[0].clientY : e.clientY;
+    const cell = getCellFromPointer(pointerX, pointerY);
+    if (cell) markCell(cell.row, cell.col);
+  };
+
+  const handlePointerMove = (e) => {
+    if (!drawing) return;
+    const pointerX = e.touches ? e.touches[0].clientX : e.clientX;
+    const pointerY = e.touches ? e.touches[0].clientY : e.clientY;
+    const cell = getCellFromPointer(pointerX, pointerY);
+    if (cell) markCell(cell.row, cell.col);
   };
 
   const handlePointerUp = () => {
@@ -32,10 +57,18 @@ function App() {
 
   return (
     <div
+      ref={containerRef}
       className="grid-container"
       role="application"
       aria-label="Cuadrícula de dibujo"
-      onMouseLeave={handlePointerUp} // para cuando el mouse sale del contenedor
+      onMouseDown={handlePointerDown}
+      onMouseMove={handlePointerMove}
+      onMouseUp={handlePointerUp}
+      onMouseLeave={handlePointerUp}
+      onTouchStart={handlePointerDown}
+      onTouchMove={handlePointerMove}
+      onTouchEnd={handlePointerUp}
+      onTouchCancel={handlePointerUp}
     >
       {Array.from({ length: ROWS }).map((_, row) => (
         <div className="grid-row" key={row}>
@@ -45,11 +78,8 @@ function App() {
               <div
                 key={col}
                 className={`grid-cell ${selectedCells[key] ? "selected" : ""}`}
-                onFocus={() => markCell(row, col)} // VoiceOver
-                onPointerDown={() => handlePointerDown(row, col)} // mouse / touch
-                onPointerEnter={() => handlePointerEnter(row, col)}
-                onPointerUp={handlePointerUp}
-                tabIndex={0} // permite que VoiceOver pueda enfocar la celda
+                tabIndex={0} // para VoiceOver
+                onFocus={() => handleFocus(row, col)} // VoiceOver
                 aria-label={`Celda ${row + 1}, ${col + 1}`}
               />
             );
@@ -61,3 +91,4 @@ function App() {
 }
 
 export default App;
+
