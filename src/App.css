@@ -1,23 +1,32 @@
-/* App.css */
-
 html, body, #root {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
-  overflow: hidden; /* evita scroll mientras dibujamos */
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.canvas-container {
-  width: 100%;
-  height: 100%;
+.grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background-color: white; /* fondo del área de dibujo */
-  touch-action: none; /* evita que el navegador interprete los gestos como scroll/zoom */
-  cursor: crosshair; /* cursor visible en desktop */
+.grid-row {
+  display: flex;
+  gap: 2px;
+}
+
+.grid-cell {
+  width: 40px;
+  height: 40px;
+  background-color: #eee;
+  border: 1px solid #ccc;
+  cursor: pointer;
+}
+
+.grid-cell.selected {
+  background-color: #000;
 }

@@ -1,58 +1,37 @@
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import "./App.css";
 
+const ROWS = 10;
+const COLS = 10;
+
 function App() {
-  const canvasRef = useRef(null);
-  const [drawing, setDrawing] = useState(false);
+  const [selectedCells, setSelectedCells] = useState({});
 
-  const startDrawing = (e) => {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const ctx = canvas.getContext("2d");
-
-    ctx.beginPath();
-    const x = e.touches ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = e.touches ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
-    ctx.moveTo(x, y);
-    setDrawing(true);
-  };
-
-  const draw = (e) => {
-    if (!drawing) return;
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const ctx = canvas.getContext("2d");
-
-    const x = e.touches ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
-    const y = e.touches ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
-    ctx.lineTo(x, y);
-    ctx.stroke();
-  };
-
-  const stopDrawing = () => {
-    setDrawing(false);
+  const markCell = (row, col) => {
+    const key = `${row}-${col}`;
+    setSelectedCells((prev) => ({
+      ...prev,
+      [key]: true,
+    }));
   };
 
   return (
-    <div
-      className="canvas-container"
-      role="application" // permite interacción directa con VoiceOver
-      aria-label="Área de dibujo"
-    >
-      <canvas
-        ref={canvasRef}
-        width={window.innerWidth}
-        height={window.innerHeight}
-        onMouseDown={startDrawing}
-        onMouseMove={draw}
-        onMouseUp={stopDrawing}
-        onMouseLeave={stopDrawing}
-        onTouchStart={startDrawing}
-        onTouchMove={draw}
-        onTouchEnd={stopDrawing}
-        onTouchCancel={stopDrawing}
-        style={{ touchAction: "none", backgroundColor: "white" }}
-      />
+    <div className="grid-container" role="application" aria-label="Cuadrícula de dibujo">
+      {Array.from({ length: ROWS }).map((_, row) => (
+        <div className="grid-row" key={row}>
+          {Array.from({ length: COLS }).map((_, col) => {
+            const key = `${row}-${col}`;
+            return (
+              <button
+                key={col}
+                className={`grid-cell ${selectedCells[key] ? "selected" : ""}`}
+                onFocus={() => markCell(row, col)}
+                aria-label={`Celda ${row + 1}, ${col + 1}`}
+              />
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
