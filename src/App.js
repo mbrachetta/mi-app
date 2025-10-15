@@ -1,69 +1,60 @@
-// App.js
-import React, { useState } from 'react';
-import './App.css';
-
-const ROWS = 20;
-const COLS = 20;
+import React, { useRef, useState } from "react";
+import "./App.css";
 
 function App() {
-  // Estado de la grilla: false = celda vacía, true = celda marcada
-  const [grid, setGrid] = useState(
-    Array.from({ length: ROWS }, () => Array(COLS).fill(false))
-  );
+  const canvasRef = useRef(null);
+  const [drawing, setDrawing] = useState(false);
 
-  // Función para marcar/desmarcar celda
-  const toggleCell = (row, col) => {
-    const newGrid = grid.map(r => [...r]);
-    newGrid[row][col] = !newGrid[row][col];
-    setGrid(newGrid);
+  const startDrawing = (e) => {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const ctx = canvas.getContext("2d");
+
+    ctx.beginPath();
+    const x = e.touches ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = e.touches ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    ctx.moveTo(x, y);
+    setDrawing(true);
   };
 
-  // Función para limpiar la grilla
-  const clearGrid = () => {
-    setGrid(Array.from({ length: ROWS }, () => Array(COLS).fill(false)));
+  const draw = (e) => {
+    if (!drawing) return;
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const ctx = canvas.getContext("2d");
+
+    const x = e.touches ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = e.touches ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    setDrawing(false);
   };
 
   return (
-    <div className="App">
-      <h1>Área de dibujo accesible</h1>
-      <p>
-        Toca o haz click en las celdas para dibujar. Funciona con VoiceOver y TalkBack.
-      </p>
-      <div role="grid" aria-label="Área de dibujo accesible">
-        {grid.map((row, i) => (
-          <div role="row" key={i} style={{ display: 'flex' }}>
-            {row.map((cell, j) => (
-              <button
-                key={j}
-                role="gridcell"
-                aria-label={`Fila ${i + 1}, columna ${j + 1}`}
-                aria-pressed={cell}
-                onClick={() => toggleCell(i, j)}
-                onTouchStart={() => toggleCell(i, j)}
-                style={{
-                  width: 25,
-                  height: 25,
-                  margin: 1,
-                  backgroundColor: cell ? 'black' : 'white',
-                  border: '1px solid gray',
-                  padding: 0,
-                }}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-      <button
-        onClick={clearGrid}
-        style={{ marginTop: 20, padding: '10px 20px' }}
-      >
-        Borrar dibujo
-      </button>
+    <div
+      className="canvas-container"
+      role="application" // permite interacción directa con VoiceOver
+      aria-label="Área de dibujo"
+    >
+      <canvas
+        ref={canvasRef}
+        width={window.innerWidth}
+        height={window.innerHeight}
+        onMouseDown={startDrawing}
+        onMouseMove={draw}
+        onMouseUp={stopDrawing}
+        onMouseLeave={stopDrawing}
+        onTouchStart={startDrawing}
+        onTouchMove={draw}
+        onTouchEnd={stopDrawing}
+        onTouchCancel={stopDrawing}
+        style={{ touchAction: "none", backgroundColor: "white" }}
+      />
     </div>
   );
 }
 
 export default App;
-
-
-

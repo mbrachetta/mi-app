@@ -1,8 +1,23 @@
-.App {
-  font-family: sans-serif;
-  text-align: center;
-  padding: 20px;
+/* App.css */
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* evita scroll mientras dibujamos */
 }
-button {
-  outline: none;
+
+.canvas-container {
+  width: 100%;
+  height: 100%;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: white; /* fondo del área de dibujo */
+  touch-action: none; /* evita que el navegador interprete los gestos como scroll/zoom */
+  cursor: crosshair; /* cursor visible en desktop */
 }
