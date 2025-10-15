@@ -1,41 +1,29 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-// -------- Utilidades de geometría (JS puro) --------
-function cellId(r, c) {
-  return `${r}:${c}`;
-}
-
+/* ==== Utilidades ==== */
+function cellId(r, c) { return `${r}:${c}`; }
 function cellCenter(id, size) {
   const [r, c] = id.split(":").map(Number);
   return { x: c * size + size / 2, y: r * size + size / 2 };
 }
 
-// Catmull–Rom (centrípeta) → segmentos Bezier cúbicos, devuelve atributo `d` para <path>
+// Catmull–Rom (centrípeta) → Bezier cúbicas (atributo `d` de <path>)
 function catmullRomToBezier(points, alpha = 0.5) {
   if (!points || points.length < 2) return "";
   const pts = points.slice();
-  // duplicar extremos para condiciones de contorno
-  pts.unshift(points[0]);
-  pts.push(points[points.length - 1]);
+  pts.unshift(points[0]); pts.push(points[points.length - 1]);
 
   const d = [`M ${pts[1].x} ${pts[1].y}`];
-
   for (let i = 0; i < pts.length - 3; i++) {
-    const p0 = pts[i], p1 = pts[i + 1], p2 = pts[i + 2], p3 = pts[i + 3];
+    const p0 = pts[i], p1 = pts[i+1], p2 = pts[i+2], p3 = pts[i+3];
+    const d01 = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1;
+    const d12 = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1;
+    const d23 = Math.hypot(p3.x - p2.x, p3.y - p2.y) || 1;
 
-    const d01 = Math.hypot(p1.x - p0.x, p1.y - p0.y);
-    const d12 = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-    const d23 = Math.hypot(p3.x - p2.x, p3.y - p2.y);
-
-    // Evitar ceros
-    const d01a = Math.pow(d01 || 1, alpha);
-    const d12a = Math.pow(d12 || 1, alpha);
-    const d23a = Math.pow(d23 || 1, alpha);
-
+    const d01a = Math.pow(d01, alpha), d12a = Math.pow(d12, alpha), d23a = Math.pow(d23, alpha);
     const A = (2 * d01a + d12a), B = (d01a + 2 * d12a);
     const C = (2 * d23a + d12a), E = (d23a + 2 * d12a);
 
-    // Denominadores de control; fallback a puntos intermedios
     const denom1 = (A + d01a) || 1;
     const denom2 = (C + d23a) || 1;
 
@@ -47,42 +35,35 @@ function catmullRomToBezier(points, alpha = 0.5) {
 
     d.push(`C ${c1x} ${c1y} ${c2x} ${c2y} ${p2.x} ${p2.y}`);
   }
-
   return d.join(" ");
 }
 
-// -------- Componente principal --------
+/* ==== App ==== */
 export default function App() {
-  // Ajusta la densidad de la grilla aquí
+  // Ajustes de lienzo
   const rows = 32, cols = 64, cellSize = 14;
   const strokeColor = "#0d6efd", strokeWidth = 2, alpha = 0.5;
 
-  // Estado de celdas pintadas
+  // Estado
   const [painted, setPainted] = useState(new Set());
-  // Celda con foco (roving tabindex)
   const [focusCell, setFocusCell] = useState({ r: 0, c: 0 });
-  // Trazo actual y trazos finalizados (para la vista previa suave)
-  const [current, setCurrent] = useState(null);      // { cells: string[], points: {x,y}[] }
-  const [strokes, setStrokes] = useState([]);        // array de strokes terminados
-
+  const [current, setCurrent] = useState(null); // { cells:[], points:[] }
+  const [strokes, setStrokes] = useState([]);
+  const [paintMode, setPaintMode] = useState(false); // NUEVO: Modo pintar
   const liveRef = useRef(null);
 
-  const announce = (msg) => {
-    if (liveRef.current) {
-      liveRef.current.textContent = msg;
-    }
-  };
+  const W = cols * cellSize, H = rows * cellSize;
 
-  // Comienza un trazo en (r,c)
-  const startStroke = (r, c) => {
+  const announce = (msg) => { if (liveRef.current) liveRef.current.textContent = msg; };
+
+  // Iniciar/terminar trazo
+  const startStrokeAt = (r, c) => {
     const id = cellId(r, c);
     const p = cellCenter(id, cellSize);
     setPainted(prev => new Set(prev).add(id));
     setCurrent({ cells: [id], points: [p] });
     announce("Inicio de trazo.");
   };
-
-  // Termina el trazo actual
   const finishStroke = () => {
     if (!current) return;
     setStrokes(prev => [...prev, current]);
@@ -90,13 +71,11 @@ export default function App() {
     announce("Trazo finalizado.");
   };
 
-  // Activa/desactiva una celda; si hay trazo en curso, añade punto
-  const toggleCell = (r, c) => {
+  // Pintar una celda (y añadir al trazo si existe)
+  const paintCell = (r, c) => {
     const id = cellId(r, c);
     setPainted(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
+      const next = new Set(prev); next.add(id); return next;
     });
     if (current) {
       setCurrent({
@@ -104,16 +83,25 @@ export default function App() {
         points: [...current.points, cellCenter(id, cellSize)]
       });
     }
-    announce(`Celda ${r + 1}, ${c + 1} ${painted.has(id) ? "desactivada" : "pintada"}.`);
   };
 
-  // Mueve el foco con flechas
+  // Click / doble toque
+  const onActivateCell = (r, c) => {
+    if (!current) startStrokeAt(r, c);
+    else paintCell(r, c);
+    announce(`Celda ${r + 1}, ${c + 1} pintada.`);
+  };
+
+  // Desplazar foco con flechas
   const moveFocus = (dr, dc) => {
     const r = (focusCell.r + dr + rows) % rows;
     const c = (focusCell.c + dc + cols) % cols;
     setFocusCell({ r, c });
-    const el = document.getElementById(`cell-${r}-${c}`);
-    if (el) el.focus();
+    const el = document.getElementById(`cell-${r}-${c}`); el && el.focus();
+    // Si modo pintar está ON y hay trazo, pintamos al entrar
+    if (paintMode) {
+      if (!current) startStrokeAt(r, c); else paintCell(r, c);
+    }
   };
 
   // Teclado por celda
@@ -125,23 +113,31 @@ export default function App() {
       case "ArrowUp":    e.preventDefault(); moveFocus(-1,0); break;
       case " ":
         e.preventDefault();
-        if (!current) startStroke(r, c); else toggleCell(r, c);
+        onActivateCell(r, c);
         break;
       case "Enter":
         e.preventDefault();
-        if (!current) startStroke(r, c); else finishStroke();
+        if (!current) startStrokeAt(r, c); else finishStroke();
         break;
       default: break;
     }
   };
 
-  // Foco inicial en [0,0]
+  // Pintar al entrar con foco (para VO) SÓLO si modo pintar está ON
+  const onCellFocus = (r, c) => {
+    setFocusCell({ r, c });
+    if (paintMode) {
+      if (!current) startStrokeAt(r, c); else paintCell(r, c);
+    }
+  };
+
+  // Foco inicial
   useEffect(() => {
     const el = document.getElementById("cell-0-0");
     if (el) el.focus();
   }, []);
 
-  // Paths suavizados (previos y actual)
+  // Paths suavizados
   const previousPaths = useMemo(
     () => strokes.map(s => catmullRomToBezier(s.points, alpha)),
     [strokes, alpha]
@@ -152,15 +148,42 @@ export default function App() {
     [current, alpha]
   );
 
-  const W = cols * cellSize, H = rows * cellSize;
+  // Alterna Modo pintar (si se apaga, cierra el trazo)
+  const togglePaintMode = () => {
+    const next = !paintMode;
+    setPaintMode(next);
+    if (!next && current) finishStroke();
+    if (next && !current) {
+      // Arranca inmediatamente en la celda enfocada (con VO esto evita doble gesto)
+      startStrokeAt(focusCell.r, focusCell.c);
+    }
+  };
+
+  const resetAll = () => {
+    setPainted(new Set()); setCurrent(null); setStrokes([]);
+    announce("Lienzo reiniciado.");
+  };
 
   return (
     <div style={{ padding: 16, fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ margin: "0 0 12px" }}>Firma por grilla (accesible) + suavizado</h1>
+      <h1 style={{ margin: "0 0 12px" }}>Grilla accesible + suavizado (VO compatible)</h1>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        <button
+          onClick={togglePaintMode}
+          aria-pressed={paintMode}
+          aria-label={`Modo pintar ${paintMode ? "activado" : "desactivado"}`}
+        >
+          {paintMode ? "🖊️ Modo pintar: ON" : "🖊️ Modo pintar: OFF"}
+        </button>
+        <button onClick={resetAll}>Reiniciar</button>
+      </div>
+
       <p id="grid-help" style={{ marginTop: 0 }}>
-        Use <strong>flechas</strong> para moverse, <strong>Barra espaciadora</strong> para pintar,
-        <strong> Enter</strong> para iniciar/terminar un trazo.
-        Con VoiceOver, active celdas con doble toque.
+        Con <strong>Modo pintar ON</strong>: al moverte por la grilla (flechas o gestos VO) se va
+        pintando y el trazo se construye automáticamente.{" "}
+        Con <strong>Modo pintar OFF</strong>: pinta con <kbd>Espacio</kbd> o con doble toque (VO) celda a celda.
+        Usa <kbd>Enter</kbd> para iniciar/finalizar trazo.
       </p>
 
       {/* Grilla accesible */}
@@ -181,25 +204,22 @@ export default function App() {
             const selected = painted.has(id);
             const isFocus = focusCell.r === r && focusCell.c === c;
             return (
-              <button
+              <div
                 key={id}
                 id={`cell-${r}-${c}`}
                 role="gridcell"
+                tabIndex={isFocus ? 0 : -1}
                 aria-selected={selected}
                 aria-label={`Celda ${r + 1}, ${c + 1}${selected ? ", pintada" : ""}`}
-                tabIndex={isFocus ? 0 : -1}
+                onFocus={() => onCellFocus(r, c)}
                 onKeyDown={(e) => onCellKeyDown(e, r, c)}
-                onClick={() => (!current ? startStroke(r, c) : toggleCell(r, c))}
+                onClick={() => onActivateCell(r, c)}
                 style={{
-                  width: cellSize,
-                  height: cellSize,
+                  width: cellSize, height: cellSize,
                   border: "1px solid #6c757d",
                   background: selected ? "#0d6efd" : "#ffffff",
-                  // foco visible (WCAG 2.4.7)
                   outline: isFocus ? "2px solid #ff922b" : "none",
-                  outlineOffset: 0,
-                  padding: 0,
-                  lineHeight: 0
+                  outlineOffset: 0
                 }}
               />
             );
@@ -207,19 +227,18 @@ export default function App() {
         )}
       </div>
 
-      {/* Región de mensajes (no mueve el foco) */}
+      {/* Región de mensajes de estado accesibles */}
       <div
         ref={liveRef}
         aria-live="polite"
         aria-atomic="true"
-        style={{ position: "absolute", left: -9999, top: "auto", width: 1, height: 1, overflow: "hidden" }}
+        style={{ position: "absolute", left: -9999, width: 1, height: 1, overflow: "hidden" }}
       />
 
       {/* Vista previa suavizada */}
       <div style={{ marginTop: 12 }}>
         <svg
-          width={W}
-          height={H}
+          width={W} height={H}
           role="img"
           aria-label="Vista previa suavizada del trazo"
           style={{ display: "block", border: "1px solid #ddd", background: "#fff" }}
