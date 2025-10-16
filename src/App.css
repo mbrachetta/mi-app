@@ -1,6 +1,33 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(10, 40px);
+  grid-template-rows: repeat(10, 40px);
+  gap: 4px;
+  justify-content: center;
+  margin-top: 40px;
+}
 
-/* Asegura buen contraste foco-visible. WCAG 2.1 AA (2.4.7) */
-:focus-visible {
-  outline: 2px solid #ff922b;
-  outline-offset: 0;
+.cell {
+  background-color: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  outline: none;
+  touch-action: none; /* evita comportamientos inesperados en touch */
+  transition: background-color 0.2s ease;
+}
+
+/* Celda pintada */
+.cell.painted {
+  background-color: #000;
+}
+
+/* Al recibir foco con teclado o lector */
+.cell:focus {
+  outline: 2px solid #1976d2;
+  outline-offset: 2px;
+}
+
+/* Asegura contraste visible cuando está pintada y enfocada */
+.cell.painted:focus {
+  outline-color: #fff;
 }

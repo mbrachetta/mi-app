@@ -1,223 +1,257 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 
-/* ---------- Utilidades ---------- */
-function idOf(r, c) { return `${r}:${c}`; }
-function centerOf(id, size) {
-  const [r, c] = id.split(":").map(Number);
-  return { x: c * size + size / 2, y: r * size + size / 2 };
-}
-function catmullRomToBezier(points, alpha = 0.5) {
-  if (!points || points.length < 2) return "";
-  const pts = points.slice();
-  pts.unshift(points[0]); pts.push(points[points.length - 1]);
-  const d = [`M ${pts[1].x} ${pts[1].y}`];
-  for (let i = 0; i < pts.length - 3; i++) {
-    const p0 = pts[i], p1 = pts[i+1], p2 = pts[i+2], p3 = pts[i+3];
-    const d01 = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1;
-    const d12 = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1;
-    const d23 = Math.hypot(p3.x - p2.x, p3.y - p2.y) || 1;
-    const d01a = Math.pow(d01, alpha), d12a = Math.pow(d12, alpha), d23a = Math.pow(d23, alpha);
-    const A = (2 * d01a + d12a), C = (2 * d23a + d12a);
-    const denom1 = (A + d01a) || 1, denom2 = (C + d23a) || 1;
-    const c1x = (-d12a * p0.x + A * p1.x + d01a * p2.x) / denom1;
-    const c1y = (-d12a * p0.y + A * p1.y + d01a * p2.y) / denom1;
-    const c2x = ( d12a * p3.x + C * p2.x - d23a * p1.x) / denom2;
-    const c2y = ( d12a * p3.y + C * p2.y - d23a * p1.y) / denom2;
-    d.push(`C ${c1x} ${c1y} ${c2x} ${c2y} ${p2.x} ${p2.y}`);
+const ROWS = 16;
+const COLS = 16;
+
+// Genera una grilla vacía
+function makeGrid(rows, cols) {
+  const g = [];
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) row.push(false);
+    g.push(row);
   }
-  return d.join(" ");
+  return g;
 }
 
-/* ---------- App ---------- */
 export default function App() {
-  // Tamaño del lienzo
-  const rows = 32, cols = 64, cellSize = 14;
-  const W = cols * cellSize, H = rows * cellSize;
+  const [grid, setGrid] = useState(() => makeGrid(ROWS, COLS));
+  const [drawMode, setDrawMode] = useState(false); // modo táctil/arrastre
+  const [paintOnFocus, setPaintOnFocus] = useState(true); // pintar al recibir foco
+  const drawingRef = useRef(false);
+  const gridRef = useRef(null);
+  const [focused, setFocused] = useState({ r: 0, c: 0 });
 
-  // Estado accesible
-  const [row, setRow] = useState(0);
-  const [col, setCol] = useState(0);
-  const [paintMode, setPaintMode] = useState(false);
-  const [painted, setPainted] = useState(new Set());          // celdas pintadas
-  const [current, setCurrent] = useState(null);               // trazo actual {cells:[], points:[]}
-  const [strokes, setStrokes] = useState([]);                 // trazos finalizados
-  const liveRef = useRef(null);
-
-  const announce = (msg) => { if (liveRef.current) liveRef.current.textContent = msg; };
-
-  // Acciones de trazo
-  const startStrokeAt = (r, c) => {
-    const k = idOf(r,c);
-    const p = centerOf(k, cellSize);
-    setPainted(prev => new Set(prev).add(k));
-    setCurrent({ cells:[k], points:[p] });
-    announce(`Inicio de trazo en fila ${r+1}, columna ${c+1}.`);
+  // --- Función para pintar una celda ---
+  const paintCell = (r, c) => {
+    setGrid((prev) => {
+      const copy = prev.map((row) => row.slice());
+      copy[r][c] = true;
+      return copy;
+    });
   };
-  const addCellToStroke = (r, c) => {
-    const k = idOf(r,c);
-    setPainted(prev => { const n = new Set(prev); n.add(k); return n; });
-    if (current) {
-      setCurrent({
-        cells: [...current.cells, k],
-        points: [...current.points, centerOf(k, cellSize)]
-      });
+
+  // --- Eventos pointer (para modo táctil) ---
+  useEffect(() => {
+    const root = gridRef.current;
+    if (!root) return;
+
+    const onPointerDown = (ev) => {
+      if (!drawMode) return;
+      ev.preventDefault();
+      drawingRef.current = true;
+      const cell = ev.target.closest("[data-cell]");
+      if (cell) {
+        const r = Number(cell.dataset.r);
+        const c = Number(cell.dataset.c);
+        paintCell(r, c);
+      }
+    };
+
+    const onPointerMove = (ev) => {
+      if (!drawMode || !drawingRef.current) return;
+      ev.preventDefault();
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      const cell = el?.closest?.("[data-cell]");
+      if (cell) {
+        const r = Number(cell.dataset.r);
+        const c = Number(cell.dataset.c);
+        paintCell(r, c);
+      }
+    };
+
+    const onPointerUp = () => {
+      drawingRef.current = false;
+    };
+
+    root.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+
+    return () => {
+      root.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [drawMode]);
+
+  // --- Mover foco con flechas ---
+  const focusCell = (r, c) => {
+    const el = gridRef.current?.querySelector(`[data-r="${r}"][data-c="${c}"]`);
+    if (el) el.focus();
+  };
+
+  const onKeyGrid = (e) => {
+    const { r, c } = focused;
+    let nr = r,
+      nc = c;
+    if (e.key === "ArrowUp" || e.key === "w") nr = Math.max(0, r - 1);
+    if (e.key === "ArrowDown" || e.key === "s") nr = Math.min(ROWS - 1, r + 1);
+    if (e.key === "ArrowLeft" || e.key === "a") nc = Math.max(0, c - 1);
+    if (e.key === "ArrowRight" || e.key === "d") nc = Math.min(COLS - 1, c + 1);
+    if (nr !== r || nc !== c) {
+      setFocused({ r: nr, c: nc });
+      focusCell(nr, nc);
+      e.preventDefault();
     }
-    announce(`Pintada fila ${r+1}, columna ${c+1}.`);
-  };
-  const finishStroke = () => {
-    if (!current) return;
-    setStrokes(prev => [...prev, current]);
-    setCurrent(null);
-    announce("Trazo finalizado.");
-  };
-
-  // Cuando muevas Fila/Columna (con VO: gestos de ajuste), pinta si el modo está ON
-  const onChangeRow = (e) => {
-    const r = Number(e.target.value);
-    setRow(r);
-    if (paintMode) {
-      if (!current) startStrokeAt(r, col); else addCellToStroke(r, col);
-    } else {
-      announce(`Fila ${r+1} de ${rows}.`);
+    if (e.key === " " || e.key === "Enter") {
+      paintCell(r, c);
+      e.preventDefault();
     }
   };
-  const onChangeCol = (e) => {
-    const c = Number(e.target.value);
-    setCol(c);
-    if (paintMode) {
-      if (!current) startStrokeAt(row, c); else addCellToStroke(row, c);
-    } else {
-      announce(`Columna ${c+1} de ${cols}.`);
-    }
-  };
-
-  const togglePaintMode = () => {
-    const next = !paintMode;
-    setPaintMode(next);
-    if (!next && current) finishStroke();            // al apagar, cerramos el trazo
-    if (next && !current) startStrokeAt(row, col);   // al encender, arrancamos en la celda actual
-  };
-  const resetAll = () => {
-    setPainted(new Set()); setStrokes([]); setCurrent(null);
-    announce("Lienzo reiniciado.");
-  };
-
-  // Paths suavizados (vista previa)
-  const strokeColor = "#0d6efd", strokeWidth = 2, alpha = 0.5;
-  const previousPaths = useMemo(
-    () => strokes.map(s => catmullRomToBezier(s.points, alpha)),
-    [strokes, alpha]
-  );
-  const currentPath = useMemo(
-    () => (current && current.points && current.points.length >= 2)
-      ? catmullRomToBezier(current.points, alpha) : "",
-    [current, alpha]
-  );
 
   return (
-    <div style={{ padding: 16, fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ margin: "0 0 8px" }}>Firma por grilla + panel accesible (VO)</h1>
+    <div style={{ padding: 20, fontFamily: "sans-serif" }}>
+      <h2>🎨 Grilla accesible para pintar</h2>
 
-      {/* Panel de control accesible */}
-      <div role="group" aria-labelledby="ctl-title" style={{ display:"grid", gap:8, maxWidth: 420 }}>
-        <h2 id="ctl-title" style={{ margin: 0, fontSize: 18 }}>Controles</h2>
-
-        <label>
-          Fila: {row+1} / {rows}
+      <div role="toolbar" aria-label="Herramientas de pintura" style={{ marginBottom: 12 }}>
+        <label style={{ marginRight: 12 }}>
           <input
-            type="range"
-            min="0" max={rows-1} step="1"
-            value={row}
-            onChange={onChangeRow}
-            aria-label="Fila"
-          />
+            type="checkbox"
+            checked={drawMode}
+            onChange={(e) => setDrawMode(e.target.checked)}
+          />{" "}
+          Activar modo táctil (arrastrar)
         </label>
 
-        <label>
-          Columna: {col+1} / {cols}
+        <label style={{ marginRight: 12 }}>
           <input
-            type="range"
-            min="0" max={cols-1} step="1"
-            value={col}
-            onChange={onChangeCol}
-            aria-label="Columna"
-          />
+            type="checkbox"
+            checked={paintOnFocus}
+            onChange={(e) => setPaintOnFocus(e.target.checked)}
+          />{" "}
+          Pintar al recibir foco (modo accesible)
         </label>
 
-        <div style={{ display:"flex", gap:8 }}>
-          <button
-            onClick={togglePaintMode}
-            aria-pressed={paintMode}
-            aria-label={`Modo pintar ${paintMode ? "activado" : "desactivado"}`}
-          >
-            {paintMode ? "🖊️ Modo pintar: ON" : "🖊️ Modo pintar: OFF"}
-          </button>
-
-          <button onClick={() => (!current ? startStrokeAt(row, col) : finishStroke())}>
-            {!current ? "Iniciar trazo" : "Finalizar trazo"}
-          </button>
-
-          <button onClick={resetAll}>Reiniciar</button>
-        </div>
+        <button
+          onClick={() => {
+            setGrid(makeGrid(ROWS, COLS));
+            const live = document.getElementById("live-region");
+            if (live) live.textContent = "Grilla reiniciada";
+          }}
+        >
+          Reiniciar
+        </button>
       </div>
 
-      {/* Mensajes accesibles sin mover foco */}
-      <div
-        ref={liveRef}
-        aria-live="polite"
-        aria-atomic="true"
-        style={{ position:"absolute", left:-9999, width:1, height:1, overflow:"hidden" }}
-      />
+      <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+        <div>
+          <div style={{ marginBottom: 6 }}>Controles (accesibles):</div>
+          <div>
+            <button
+              onClick={() => {
+                const nr = Math.max(0, focused.r - 1);
+                setFocused((s) => ({ r: nr, c: s.c }));
+                focusCell(nr, focused.c);
+              }}
+            >
+              ↑
+            </button>
+            <button
+              onClick={() => {
+                const nc = Math.max(0, focused.c - 1);
+                setFocused((s) => ({ r: s.r, c: nc }));
+                focusCell(focused.r, nc);
+              }}
+            >
+              ←
+            </button>
+            <button
+              onClick={() => {
+                const nc = Math.min(COLS - 1, focused.c + 1);
+                setFocused((s) => ({ r: s.r, c: nc }));
+                focusCell(focused.r, nc);
+              }}
+            >
+              →
+            </button>
+            <button
+              onClick={() => {
+                const nr = Math.min(ROWS - 1, focused.r + 1);
+                setFocused((s) => ({ r: nr, c: s.c }));
+                focusCell(nr, focused.c);
+              }}
+            >
+              ↓
+            </button>
+            <button onClick={() => paintCell(focused.r, focused.c)}>Pintar</button>
+          </div>
+        </div>
 
-      {/* Grilla visual (no focusable) */}
+        <div
+          id="live-region"
+          aria-live="polite"
+          style={{
+            position: "absolute",
+            left: -9999,
+            width: 1,
+            height: 1,
+            overflow: "hidden",
+          }}
+        />
+      </div>
+
       <div
-        aria-label="Grilla de firma"
-        role="img"
-        aria-description={`Vista del lienzo. Celda actual fila ${row+1}, columna ${col+1}.`}
+        ref={gridRef}
+        role="grid"
+        aria-label="Lienzo de dibujo"
+        tabIndex={0}
+        onKeyDown={onKeyGrid}
         style={{
-          marginTop: 12,
           display: "grid",
-          gridTemplateColumns: `repeat(${cols}, ${cellSize}px)`,
+          gridTemplateColumns: `repeat(${COLS}, 28px)`,
+          gridTemplateRows: `repeat(${ROWS}, 28px)`,
           gap: 2,
-          userSelect: "none",
-          touchAction: "none" // no es esencial para VO, pero evita scroll accidental
+          touchAction: drawMode ? "none" : "auto",
+          maxWidth: "fit-content",
+          border: "1px solid #bbb",
+          padding: 4,
         }}
       >
-        {Array.from({ length: rows }).map((_, r) =>
-          Array.from({ length: cols }).map((_, c) => {
-            const k = idOf(r,c);
-            const isPainted = painted.has(k);
-            const isCursor = r === row && c === col;
-            return (
-              <div
-                key={k}
-                style={{
-                  width: cellSize, height: cellSize,
-                  border: "1px solid #6c757d",
-                  background: isPainted ? "#0d6efd" : "#fff",
-                  outline: isCursor ? "2px solid #ff922b" : "none",
-                  outlineOffset: 0
-                }}
-              />
-            );
-          })
+        {grid.map((row, r) =>
+          row.map((painted, c) => (
+            <div
+              key={`${r}-${c}`}
+              data-cell
+              data-r={r}
+              data-c={c}
+              role="gridcell"
+              tabIndex={0}
+              aria-label={`Celda ${r + 1}, columna ${c + 1}, ${
+                painted ? "pintada" : "sin pintar"
+              }`}
+              onFocus={() => {
+                setFocused({ r, c });
+                if (paintOnFocus) paintCell(r, c);
+              }}
+              onClick={() => paintCell(r, c)}
+              style={{
+                width: 28,
+                height: 28,
+                background: painted ? "#1e90ff" : "#fff",
+                border: "1px solid #ddd",
+                outline:
+                  focused.r === r && focused.c === c ? "2px solid #ffb" : "none",
+                borderRadius: 2,
+              }}
+            />
+          ))
         )}
       </div>
 
-      {/* Vista previa suavizada (oculta para VO) */}
-      <div style={{ marginTop: 12 }}>
-        <svg
-          width={W} height={H}
-          aria-hidden="true" focusable="false"
-          style={{ display:"block", border:"1px solid #ddd", background:"#fff" }}
-        >
-          {previousPaths.map((d,i) => (
-            <path key={i} d={d} stroke={strokeColor} strokeWidth={strokeWidth} fill="none" />
-          ))}
-          {currentPath && (
-            <path d={currentPath} stroke={strokeColor} strokeWidth={strokeWidth} fill="none" />
-          )}
-        </svg>
+      <div style={{ marginTop: 12, fontSize: 13, color: "#333" }}>
+        <strong>Notas:</strong>
+        <ul>
+          <li>
+            Si usás TalkBack o VoiceOver, activá “Pintar al recibir foco”. Al moverte
+            por la grilla, las celdas se pintarán automáticamente.
+          </li>
+          <li>
+            Si preferís dibujar con el dedo, activá “Modo táctil (arrastrar)”.
+            Cuando el lector esté activo, podés intentar usar dos dedos.
+          </li>
+          <li>Los botones de flechas te permiten moverte sin gestos táctiles.</li>
+        </ul>
       </div>
     </div>
   );
