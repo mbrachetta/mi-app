@@ -76,7 +76,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <h1 className="title">Área de dibujo accesible</h1>
+      <h1 className="title">Área de dibujo accesiblet</h1>
 
       {/* Región interactiva que cede control táctil a la app */}
       <div role="application" aria-labelledby="title">
