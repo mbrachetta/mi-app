@@ -3,6 +3,7 @@ import { useRef, useEffect, useState } from "react";
 export default function App() {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [status, setStatus] = useState("Listo para dibujar");
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -15,10 +16,20 @@ export default function App() {
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
 
+    const getCoords = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches ? e.touches[0] : e;
+      return {
+        x: touch.clientX - rect.left,
+        y: touch.clientY - rect.top,
+      };
+    };
+
     const startDrawing = (e) => {
       e.preventDefault();
       setIsDrawing(true);
-      const { x, y } = getCoords(e, canvas);
+      setStatus("Dibujando…");
+      const { x, y } = getCoords(e);
       ctx.beginPath();
       ctx.moveTo(x, y);
     };
@@ -26,7 +37,7 @@ export default function App() {
     const draw = (e) => {
       if (!isDrawing) return;
       e.preventDefault();
-      const { x, y } = getCoords(e, canvas);
+      const { x, y } = getCoords(e);
       ctx.lineTo(x, y);
       ctx.strokeStyle = "black";
       ctx.lineWidth = 4;
@@ -36,20 +47,12 @@ export default function App() {
 
     const stopDrawing = (e) => {
       e.preventDefault();
+      if (isDrawing) setStatus("Dibujo detenido");
       setIsDrawing(false);
       ctx.closePath();
     };
 
-    const getCoords = (e, canvas) => {
-      const rect = canvas.getBoundingClientRect();
-      const touch = e.touches ? e.touches[0] : e;
-      return {
-        x: touch.clientX - rect.left,
-        y: touch.clientY - rect.top,
-      };
-    };
-
-    // Eventos táctiles y de mouse
+    // Eventos táctiles y mouse
     canvas.addEventListener("mousedown", startDrawing);
     canvas.addEventListener("mousemove", draw);
     canvas.addEventListener("mouseup", stopDrawing);
@@ -74,12 +77,19 @@ export default function App() {
   return (
     <div className="app">
       <h1 className="title">Área de dibujo accesible</h1>
-      <canvas
-        ref={canvasRef}
-        aria-hidden="true"
-        tabIndex={-1}
-        className="drawing-area"
-      ></canvas>
+
+      {/* Región interactiva que cede control táctil a la app */}
+      <div role="application" aria-labelledby="title">
+        <canvas
+          ref={canvasRef}
+          id="areaDibujo"
+          aria-label="Área interactiva para dibujar"
+          className="drawing-area"
+        ></canvas>
+        <p aria-live="polite" id="status" className="sr-only">
+          {status}
+        </p>
+      </div>
     </div>
   );
 }
